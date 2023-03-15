@@ -1,14 +1,11 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `scuttlebutt`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Implementations of correlation-robust hash functions (and their variants)
 //! based on fixed-key AES.
 
 use crate::{Aes128, Block, FIXED_KEY_AES128};
-use core::arch::x86_64::*;
+use vectoreyes::{
+    array_utils::{ArrayUnrolledExt, ArrayUnrolledOps, UnrollableArraySize},
+    SimdBase8, U8x16,
+};
 
 /// AES-based correlation-robust hash function.
 ///
@@ -47,14 +44,8 @@ impl AesHash {
     /// function and `σ(x₀ || x₁) = (x₀ ⊕ x₁) || x₁`.
     #[inline]
     pub fn ccr_hash(&self, i: Block, x: Block) -> Block {
-        unsafe {
-            let x = _mm_xor_si128(
-                _mm_shuffle_epi32(x.into(), 78),
-                #[allow(overflowing_literals)]
-                _mm_and_si128(x.into(), _mm_set_epi64x(0xFFFF_FFFF_FFFF_FFFF, 0x00)),
-            );
-            self.cr_hash(i, Block::from(x))
-        }
+        let x = U8x16::from(x.0);
+        self.cr_hash(i, Block::from(x.shift_bytes_right::<8>() ^ x))
     }
 
     /// Tweakable circular correlation robust hash function (cf.
@@ -67,5 +58,22 @@ impl AesHash {
         let t = y ^ i;
         let z = self.aes.encrypt(t);
         y ^ z
+    }
+
+    /// Batch tweakable circular correlation robust hash function
+    pub fn tccr_hash_many<const Q: usize>(&self, i: Block, xs: [Block; Q]) -> [Block; Q]
+    where
+        ArrayUnrolledOps: UnrollableArraySize<Q>,
+    {
+        let y = self.aes.encrypt_blocks(xs);
+        let t = y.array_map(
+            #[inline(always)]
+            |x| x ^ i,
+        );
+        let z = self.aes.encrypt_blocks(t);
+        y.array_zip(z).array_map(
+            #[inline(always)]
+            |(a, b)| a ^ b,
+        )
     }
 }

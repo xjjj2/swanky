@@ -1,9 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `popsicle`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 /// Errors produced by the private set intersection protocols.
 #[derive(Debug)]
 pub enum Error {
@@ -32,8 +26,8 @@ pub enum Error {
     #[cfg(feature = "psty")]
     SSLError(openssl::error::ErrorStack),
     /// An error occurred in the underlying 2PC protocol.
-    #[cfg(feature = "fancy")]
-    TwopcError(fancy_garbling::errors::TwopacError),
+    #[cfg(feature = "psty")]
+    TwopacError(fancy_garbling::errors::TwopacError),
 }
 
 #[cfg(feature = "psty")]
@@ -69,7 +63,7 @@ impl From<scuttlebutt::cointoss::Error> for Error {
 impl From<fancy_garbling::errors::TwopacError> for Error {
     #[inline]
     fn from(e: fancy_garbling::errors::TwopacError) -> Error {
-        Error::TwopcError(e)
+        Error::TwopacError(e)
     }
 }
 
@@ -92,8 +86,8 @@ impl std::fmt::Display for Error {
             Error::InvalidPayloadsLength => write!(f, "Invalid length of payloads!"),
             #[cfg(feature = "psty")]
             Error::SSLError(e) => write!(f, "SSL Error: {}", e),
-            #[cfg(feature = "fancy")]
-            Error::TwopcError(e) => write!(f, "2PC protocol error: {}", e),
+            #[cfg(feature = "psty")]
+            Error::TwopacError(e) => write!(f, "2PC protocol error: {}", e),
         }
     }
 }

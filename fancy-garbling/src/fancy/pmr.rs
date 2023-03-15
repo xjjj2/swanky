@@ -1,9 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `fancy-garbling`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Module containing `PmrGadgets`, which are the PMR-based gadgets for `Fancy`. These
 //! are mostly used internally in CRT gadgets.
 
@@ -14,13 +8,6 @@ use std::ops::Deref;
 /// Bundle which is explicitly PMR-representation.
 #[derive(Clone)]
 pub struct PmrBundle<W>(Bundle<W>);
-
-// impl<W: Clone + HasModulus> PmrBundle<W> {
-//     /// Create a new PMR bundle from a vector of wires.
-//     pub fn new(ws: Vec<W>) -> PmrBundle<W> {
-//         PmrBundle(Bundle::new(ws))
-//     }
-// }
 
 impl<W: Clone + HasModulus> Deref for PmrBundle<W> {
     type Target = Bundle<W>;

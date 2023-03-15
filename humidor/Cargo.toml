@@ -1,0 +1,55 @@
+[package]
+name = "humidor"
+readme = "README.md"
+description = "A test-bed for Ligero-like protocols"
+categories = ["cryptography"]
+keywords = ["cryptography", "zero-knowledge-proofs", "ligero"]
+autobenches = false
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+version.workspace = true
+
+[lib]
+doctest = false
+
+[features]
+
+[dependencies]
+merkle-cbt.workspace = true
+sprs.workspace = true
+ndarray.workspace = true
+num-traits.workspace = true
+rand.workspace = true
+subtle.workspace = true
+scuttlebutt = { workspace = true, features = ["ff"] }
+generic-array.workspace = true
+digest.workspace = true
+simple-arith-circuit = { workspace = true, features = ["serde"] }
+bincode.workspace = true
+
+[dev-dependencies]
+simple-arith-circuit = { workspace = true, features = ["proptest"] }
+proptest.workspace = true
+criterion.workspace = true
+sha2.workspace = true
+
+[[bench]]
+name = "random_circuit"
+harness = false
+
+[[example]]
+name = "random_circuit_interactive"
+
+[[example]]
+name = "random_circuit_noninteractive"
+
+[[example]]
+name = "random_circuit_noninteractive_with_shared"
+
+[[example]]
+name = "random_circuit_shared_witness"
+
+[[example]]
+name = "random_circuit_once"

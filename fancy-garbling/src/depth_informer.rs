@@ -1,14 +1,9 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `fancy-garbling`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Fancy object to compute the multiplicative depth of a computation.
 
 use crate::{
     errors::FancyError,
     fancy::{Fancy, FancyInput, FancyReveal, HasModulus},
+    FancyArithmetic, FancyBinary,
 };
 use std::cmp::max;
 
@@ -119,18 +114,25 @@ impl FancyInput for DepthInformer {
     }
 }
 
-impl Fancy for DepthInformer {
-    type Item = DepthItem;
-    type Error = DepthError;
-
-    fn constant(&mut self, _val: u16, q: u16) -> Result<Self::Item, Self::Error> {
-        self.nconstants += 1;
-        Ok(DepthItem {
-            modulus: q,
-            depth: 0,
-        })
+impl FancyBinary for DepthInformer {
+    fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
+        FancyArithmetic::add(self, x, y)
     }
 
+    fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
+        FancyArithmetic::mul(self, x, y)
+    }
+
+    fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, Self::Error> {
+        self.nadds += 1;
+        Ok(DepthItem {
+            modulus: x.modulus,
+            depth: x.depth,
+        })
+    }
+}
+
+impl FancyArithmetic for DepthInformer {
     fn add(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
         self.nadds += 1;
         Ok(DepthItem {
@@ -170,6 +172,19 @@ impl Fancy for DepthInformer {
         _tt: Option<Vec<u16>>,
     ) -> Result<Self::Item, Self::Error> {
         Err(DepthError::ProjUnsupported)
+    }
+}
+
+impl Fancy for DepthInformer {
+    type Item = DepthItem;
+    type Error = DepthError;
+
+    fn constant(&mut self, _val: u16, q: u16) -> Result<Self::Item, Self::Error> {
+        self.nconstants += 1;
+        Ok(DepthItem {
+            modulus: q,
+            depth: 0,
+        })
     }
 
     fn output(&mut self, x: &Self::Item) -> Result<Option<u16>, Self::Error> {

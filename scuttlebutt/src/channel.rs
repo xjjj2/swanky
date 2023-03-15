@@ -1,9 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `scuttlebutt`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 mod hash_channel;
 mod sync_channel;
 mod track_channel;
@@ -17,9 +11,10 @@ pub use track_channel::TrackChannel;
 #[cfg(unix)]
 pub use unix_channel::{track_unix_channel_pair, unix_channel_pair, TrackUnixChannel, UnixChannel};
 
-use crate::{Block, Block512};
+use crate::{serialization::CanonicalSerialize, Block, Block512};
 #[cfg(feature = "curve25519-dalek")]
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use generic_array::GenericArray;
 use std::{
     cell::RefCell,
     io::{Read, Result, Write},
@@ -80,7 +75,7 @@ pub trait AbstractChannel {
     /// Write a `u16` to the channel.
     #[inline(always)]
     fn write_u16(&mut self, s: u16) -> Result<()> {
-        let data: [u8; 2] = unsafe { std::mem::transmute(s) };
+        let data: [u8; 2] = s.to_le_bytes();
         self.write_bytes(&data)?;
         Ok(())
     }
@@ -90,14 +85,14 @@ pub trait AbstractChannel {
     fn read_u16(&mut self) -> Result<u16> {
         let mut data = [0u8; 2];
         self.read_bytes(&mut data)?;
-        let s = unsafe { std::mem::transmute(data) };
+        let s = u16::from_le_bytes(data);
         Ok(s)
     }
 
     /// Write a `u32` to the channel.
     #[inline(always)]
     fn write_u32(&mut self, s: u32) -> Result<()> {
-        let data: [u8; 4] = unsafe { std::mem::transmute(s) };
+        let data: [u8; 4] = s.to_le_bytes();
         self.write_bytes(&data)?;
         Ok(())
     }
@@ -107,14 +102,14 @@ pub trait AbstractChannel {
     fn read_u32(&mut self) -> Result<u32> {
         let mut data = [0u8; 4];
         self.read_bytes(&mut data)?;
-        let s = unsafe { std::mem::transmute(data) };
+        let s = u32::from_le_bytes(data);
         Ok(s)
     }
 
     /// Write a `u64` to the channel.
     #[inline(always)]
     fn write_u64(&mut self, s: u64) -> Result<()> {
-        let data: [u8; 8] = unsafe { std::mem::transmute(s) };
+        let data: [u8; 8] = s.to_le_bytes();
         self.write_bytes(&data)?;
         Ok(())
     }
@@ -124,25 +119,21 @@ pub trait AbstractChannel {
     fn read_u64(&mut self) -> Result<u64> {
         let mut data = [0u8; 8];
         self.read_bytes(&mut data)?;
-        let s = unsafe { std::mem::transmute(data) };
+        let s = u64::from_le_bytes(data);
         Ok(s)
     }
 
     /// Write a `usize` to the channel.
     #[inline(always)]
     fn write_usize(&mut self, s: usize) -> Result<()> {
-        let data: [u8; 8] = unsafe { std::mem::transmute(s) };
-        self.write_bytes(&data)?;
-        Ok(())
+        self.write_u64(s as u64)
     }
 
     /// Read a `usize` from the channel.
     #[inline(always)]
     fn read_usize(&mut self) -> Result<usize> {
-        let mut data = [0u8; 8];
-        self.read_bytes(&mut data)?;
-        let s = unsafe { std::mem::transmute(data) };
-        Ok(s)
+        let x = self.read_u64()?;
+        usize::try_from(x).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 
     /// Write a `Block` to the channel.
@@ -169,18 +160,15 @@ pub trait AbstractChannel {
     /// Write a `Block512` to the channel.
     #[inline(always)]
     fn write_block512(&mut self, b: &Block512) -> Result<()> {
-        for block in b.0.iter() {
-            self.write_block(block)?;
-        }
-        Ok(())
+        self.write_bytes(b.as_ref())
     }
 
     /// Read a `Block512` from the channel.
     #[inline(always)]
     fn read_block512(&mut self) -> Result<Block512> {
-        let mut data = [0u8; 64];
-        self.read_bytes(&mut data)?;
-        Ok(Block512::from(data))
+        let mut out = Block512::default();
+        self.read_bytes(out.as_mut())?;
+        Ok(out)
     }
 
     /// Write a `RistrettoPoint` to the channel.
@@ -207,6 +195,23 @@ pub trait AbstractChannel {
             }
         };
         Ok(pt)
+    }
+
+    /// Read a `CanonicalSerialize` object from the channel.
+    fn read_serializable<E: CanonicalSerialize>(&mut self) -> Result<E> {
+        let mut buf = GenericArray::<u8, E::ByteReprLen>::default();
+        self.read_bytes(&mut buf[..])?;
+        let fe = match E::from_bytes(&buf) {
+            Ok(fe) => fe,
+            Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
+        };
+        Ok(fe)
+    }
+
+    /// Write a `CanonicalSerialize` object to the channel.
+    fn write_serializable<E: CanonicalSerialize>(&mut self, x: &E) -> Result<()> {
+        self.write_bytes(&x.to_bytes())?;
+        Ok(())
     }
 }
 
@@ -266,7 +271,7 @@ pub struct SymChannel<S> {
     stream: Rc<RefCell<S>>,
 }
 
-impl <S: Read + Write> SymChannel<S> {
+impl<S: Read + Write> SymChannel<S> {
     /// Make a new `Channel` from a stream.
     pub fn new(stream: S) -> Self {
         let stream = Rc::new(RefCell::new(stream));

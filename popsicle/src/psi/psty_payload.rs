@@ -1,9 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `popsicle`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Implementation of the Pinkas-Schneider-Tkachenko-Yanai "extended" private
 //! set intersection protocol (cf. <https://eprint.iacr.org/2019/241>).
 
@@ -40,14 +34,8 @@ use crate::{
 };
 use fancy_garbling::{
     twopac::semihonest::{Evaluator, Garbler},
-    BinaryBundle,
-    Bundle,
-    BundleGadgets,
-    CrtBundle,
-    CrtGadgets,
-    Fancy,
-    FancyInput,
-    Wire,
+    AllWire, ArithmeticBundleGadgets, BinaryBundle, Bundle, CrtBundle, CrtGadgets, Fancy,
+    FancyBinary, FancyInput,
 };
 
 use itertools::Itertools;
@@ -93,10 +81,10 @@ pub struct Sender {
 
 /// State of the sender.
 pub struct SenderState {
-    pub opprf_ids: Vec<Block512>,
-    pub opprf_payloads: Vec<Block512>,
-    pub table: Vec<Vec<Block>>,
-    pub payload: Vec<Vec<Block512>>,
+    opprf_ids: Vec<Block512>,
+    opprf_payloads: Vec<Block512>,
+    table: Vec<Vec<Block>>,
+    payload: Vec<Vec<Block512>>,
 }
 
 /// Private set intersection receiver.
@@ -108,10 +96,10 @@ pub struct Receiver {
 
 /// State of the receiver.
 pub struct ReceiverState {
-    pub opprf_ids: Vec<Block512>,
-    pub opprf_payloads: Vec<Block512>,
-    pub table: Vec<Block>,
-    pub payload: Vec<Block512>,
+    opprf_ids: Vec<Block512>,
+    opprf_payloads: Vec<Block512>,
+    table: Vec<Block>,
+    payload: Vec<Block512>,
 }
 
 impl Sender {
@@ -143,7 +131,8 @@ impl Sender {
         rng: &mut RNG,
     ) -> Result<(), Error> {
         let mut gb =
-            Garbler::<C, RNG, OtSender>::new(channel.clone(), RNG::from_seed(rng.gen())).unwrap();
+            Garbler::<C, RNG, OtSender, AllWire>::new(channel.clone(), RNG::from_seed(rng.gen()))
+                .unwrap();
 
         let (mut state, nbins, _, _) = self.bucketize_data(table, payloads, channel, rng)?;
 
@@ -160,10 +149,10 @@ impl Sender {
         Ok(())
     }
 
-    // PSI with associated payloads for large sized sets. Batched OPPRF + GC computation is performed
-    // on a Megabin instead of the entirety of the hashed data. The number of Megabin is pre-agreed
-    // on during the bucketization. Users have to specify the GC deltas. If the computation is run
-    // in parallel, the deltas must be synced accross threads.
+    /// PSI with associated payloads for large sized sets. Batched OPPRF + GC computation is performed
+    /// on a Megabin instead of the entirety of the hashed data. The number of Megabin is pre-agreed
+    /// on during the bucketization. Users have to specify the GC deltas. If the computation is run
+    /// in parallel, the deltas must be synced accross threads.
     pub fn full_protocol_large<
         C: AbstractChannel,
         RNG: RngCore + CryptoRng + SeedableRng<Seed = Block>,
@@ -176,7 +165,8 @@ impl Sender {
         rng: &mut RNG,
     ) -> Result<(), Error> {
         let mut gb =
-            Garbler::<C, RNG, OtSender>::new(channel.clone(), RNG::from_seed(rng.gen())).unwrap();
+            Garbler::<C, RNG, OtSender, AllWire>::new(channel.clone(), RNG::from_seed(rng.gen()))
+                .unwrap();
         let _ = gb.load_deltas(path_deltas);
 
         let (state, _nbins, _nmegabins, megasize) =
@@ -214,11 +204,11 @@ impl Sender {
         Ok(())
     }
 
-    // PSI computation designed sepecifically for large sets. Assumes the bucketization stage
-    // has already been done, bins were seperated into megabins and that deltas for the circuit
-    // were precomputed.
-    // Returns a garbled output over given megabins that the user can open or join with other
-    // threads results using compute_aggregate.
+    /// PSI computation designed sepecifically for large sets. Assumes the bucketization stage
+    /// has already been done, bins were seperated into megabins and that deltas for the circuit
+    /// were precomputed.
+    /// Returns a garbled output over given megabins that the user can open or join with other
+    /// threads results using compute_aggregate.
     pub fn compute_payload<
         C: AbstractChannel,
         RNG: RngCore + CryptoRng + SeedableRng<Seed = Block>,
@@ -231,15 +221,10 @@ impl Sender {
         path_deltas: &str,
         channel: &mut C,
         rng: &mut RNG,
-    ) -> Result<
-        (
-            CrtBundle<fancy_garbling::Wire>,
-            CrtBundle<fancy_garbling::Wire>,
-        ),
-        Error,
-    > {
+    ) -> Result<(CrtBundle<AllWire>, CrtBundle<AllWire>), Error> {
         let mut gb =
-            Garbler::<C, RNG, OtSender>::new(channel.clone(), RNG::from_seed(rng.gen())).unwrap();
+            Garbler::<C, RNG, OtSender, AllWire>::new(channel.clone(), RNG::from_seed(rng.gen()))
+                .unwrap();
         let _ = gb.load_deltas(path_deltas);
 
         let qs = &fancy_garbling::util::PRIMES[..PAYLOAD_PRIME_SIZE_EXPANDED];
@@ -276,21 +261,22 @@ impl Sender {
         Ok((acc, sum_weights))
     }
 
-    // Aggregates partial grabled outputs encoded as CRTs. Uses the same deltas used by partial
-    // circuits.
+    /// Aggregates partial grabled outputs encoded as CRTs. Uses the same deltas used by partial
+    /// circuits.
     pub fn compute_aggregates<
         C: AbstractChannel,
         RNG: RngCore + CryptoRng + SeedableRng<Seed = Block>,
     >(
         &mut self,
-        aggregates: Vec<Vec<Wire>>,
-        sum_of_weights: Vec<Vec<Wire>>,
+        aggregates: Vec<Vec<AllWire>>,
+        sum_of_weights: Vec<Vec<AllWire>>,
         path_deltas: &str,
         channel: &mut C,
         rng: &mut RNG,
     ) -> Result<(), Error> {
         let mut gb =
-            Garbler::<C, RNG, OtSender>::new(channel.clone(), RNG::from_seed(rng.gen())).unwrap();
+            Garbler::<C, RNG, OtSender, AllWire>::new(channel.clone(), RNG::from_seed(rng.gen()))
+                .unwrap();
         let _ = gb.load_deltas(path_deltas);
 
         let mut acc = CrtBundle::new(aggregates[0].clone());
@@ -309,7 +295,7 @@ impl Sender {
         Ok(())
     }
 
-    // Bucketizes data according to the number of bins specified by the Receiver
+    /// Bucketizes data according to the number of bins specified by the Receiver
     pub fn bucketize_data<C: AbstractChannel, RNG: RngCore + CryptoRng + SeedableRng>(
         &mut self,
         inputs: &[Msg],
@@ -341,11 +327,7 @@ impl Sender {
                 // long.
                 // In the case of a binary representation: the payload can be simply XORed
                 // with the target vector, the appropriately padded if need be.
-                payload[bin].push(mask_payload_crt(
-                    *p,
-                    ts_payload[bin],
-                    rng,
-                ));
+                payload[bin].push(mask_payload_crt(*p, ts_payload[bin], rng));
                 bins.push(bin);
             }
             // if j = H1(y) = H2(y) for some y, then P2 adds a uniformly random element to
@@ -400,11 +382,20 @@ impl Sender {
 }
 //
 impl SenderState {
-    // Encodes circuit inputs before passing them to GC
+    /// Encodes circuit inputs before passing them to GC
     pub fn encode_circuit_inputs<C, RNG>(
         &mut self,
-        gb: &mut Garbler<C, RNG, OtSender>,
-    ) -> Result<(Vec<Wire>, Vec<Wire>, Vec<Wire>, Vec<Wire>, Vec<Wire>), Error>
+        gb: &mut Garbler<C, RNG, OtSender, AllWire>,
+    ) -> Result<
+        (
+            Vec<AllWire>,
+            Vec<AllWire>,
+            Vec<AllWire>,
+            Vec<AllWire>,
+            Vec<AllWire>,
+        ),
+        Error,
+    >
     where
         C: AbstractChannel,
         RNG: RngCore + CryptoRng + SeedableRng<Seed = Block>,
@@ -441,17 +432,11 @@ impl SenderState {
         ))
     }
 
-    //Encode inputs & compute weighted aggregates circuit
+    /// Encode inputs & compute weighted aggregates circuit
     pub fn build_and_compute_circuit<C, RNG>(
         &mut self,
-        gb: &mut Garbler<C, RNG, OtSender>,
-    ) -> Result<
-        (
-            CrtBundle<fancy_garbling::Wire>,
-            CrtBundle<fancy_garbling::Wire>,
-        ),
-        Error,
-    >
+        gb: &mut Garbler<C, RNG, OtSender, AllWire>,
+    ) -> Result<(CrtBundle<AllWire>, CrtBundle<AllWire>), Error>
     where
         C: AbstractChannel,
         RNG: RngCore + CryptoRng + SeedableRng<Seed = Block>,
@@ -482,6 +467,8 @@ impl Receiver {
         })
     }
 
+    /// PSI with associated payloads for small to moderately sized sets without any
+    /// parallelization features.
     pub fn full_protocol<
         C: AbstractChannel,
         RNG: RngCore + CryptoRng + SeedableRng<Seed = Block>,
@@ -492,9 +479,11 @@ impl Receiver {
         channel: &mut C,
         rng: &mut RNG,
     ) -> Result<u128, Error> {
-        let mut ev =
-            Evaluator::<C, RNG, OtReceiver>::new(channel.clone(), RNG::from_seed(rng.gen()))
-                .unwrap();
+        let mut ev = Evaluator::<C, RNG, OtReceiver, AllWire>::new(
+            channel.clone(),
+            RNG::from_seed(rng.gen()),
+        )
+        .unwrap();
         let qs = &fancy_garbling::util::PRIMES[..PAYLOAD_PRIME_SIZE_EXPANDED];
 
         let (table, payload) = self.bucketize_data(table, payloads, channel, rng)?;
@@ -521,6 +510,10 @@ impl Receiver {
         Ok(weighted_mean)
     }
 
+    /// PSI with associated payloads for large sized sets. Batched OPPRF + GC computation is performed
+    /// on a Megabin instead of the entirety of the hashed data. The number of Megabin is pre-agreed
+    /// on during the bucketization. Users have to specify the GC deltas. If the computation is run
+    /// in parallel, the deltas must be synced accross threads.
     pub fn full_protocol_large<
         C: AbstractChannel,
         RNG: RngCore + CryptoRng + SeedableRng<Seed = Block>,
@@ -532,9 +525,11 @@ impl Receiver {
         channel: &mut C,
         rng: &mut RNG,
     ) -> Result<u128, Error> {
-        let mut ev =
-            Evaluator::<C, RNG, OtReceiver>::new(channel.clone(), RNG::from_seed(rng.gen()))
-                .unwrap();
+        let mut ev = Evaluator::<C, RNG, OtReceiver, AllWire>::new(
+            channel.clone(),
+            RNG::from_seed(rng.gen()),
+        )
+        .unwrap();
         let qs = &fancy_garbling::util::PRIMES[..PAYLOAD_PRIME_SIZE_EXPANDED];
 
         let (table, payload, _) =
@@ -554,6 +549,11 @@ impl Receiver {
         Ok(weighted_mean)
     }
 
+    /// PSI computation designed sepecifically for large sets. Assumes the bucketization stage
+    /// has already been done, bins were seperated into megabins and that deltas for the circuit
+    /// were precomputed.
+    /// Returns a garbled output over given megabins that the user can open or join with other
+    /// threads results using compute_aggregate.
     pub fn compute_payload<
         C: AbstractChannel,
         RNG: RngCore + CryptoRng + SeedableRng<Seed = Block>,
@@ -563,16 +563,12 @@ impl Receiver {
         payload: Vec<Vec<Block512>>,
         channel: &mut C,
         rng: &mut RNG,
-    ) -> Result<
-        (
-            CrtBundle<fancy_garbling::Wire>,
-            CrtBundle<fancy_garbling::Wire>,
-        ),
-        Error,
-    > {
-        let mut ev =
-            Evaluator::<C, RNG, OtReceiver>::new(channel.clone(), RNG::from_seed(rng.gen()))
-                .unwrap();
+    ) -> Result<(CrtBundle<AllWire>, CrtBundle<AllWire>), Error> {
+        let mut ev = Evaluator::<C, RNG, OtReceiver, AllWire>::new(
+            channel.clone(),
+            RNG::from_seed(rng.gen()),
+        )
+        .unwrap();
         let qs = &fancy_garbling::util::PRIMES[..PAYLOAD_PRIME_SIZE_EXPANDED];
         let q = fancy_garbling::util::product(&qs);
 
@@ -606,21 +602,23 @@ impl Receiver {
         Ok((acc, sum_weights))
     }
 
-    // Aggregates partial grabled outputs encoded as CRTs. Uses the same deltas used by partial
-    // circuits.
+    /// Aggregates partial grabled outputs encoded as CRTs. Uses the same deltas used by partial
+    /// circuits.
     pub fn compute_aggregates<
         C: AbstractChannel,
         RNG: RngCore + CryptoRng + SeedableRng<Seed = Block>,
     >(
         &mut self,
-        aggregates: Vec<Vec<Wire>>,
-        sum_of_weights: Vec<Vec<Wire>>,
+        aggregates: Vec<Vec<AllWire>>,
+        sum_of_weights: Vec<Vec<AllWire>>,
         channel: &mut C,
         rng: &mut RNG,
     ) -> Result<u128, Error> {
-        let mut ev =
-            Evaluator::<C, RNG, OtReceiver>::new(channel.clone(), RNG::from_seed(rng.gen()))
-                .unwrap();
+        let mut ev = Evaluator::<C, RNG, OtReceiver, AllWire>::new(
+            channel.clone(),
+            RNG::from_seed(rng.gen()),
+        )
+        .unwrap();
 
         let qs = &fancy_garbling::util::PRIMES[..PAYLOAD_PRIME_SIZE_EXPANDED];
         let _q = fancy_garbling::util::product(&qs);
@@ -649,7 +647,7 @@ impl Receiver {
         Ok(weighted_mean)
     }
 
-    // For small to moderate sized sets, bucketizes using Cuckoo Hashing
+    /// For small to moderate sized sets, bucketizes using Cuckoo Hashing
     pub fn bucketize_data<C: AbstractChannel, RNG: RngCore + CryptoRng + SeedableRng>(
         &mut self,
         inputs: &[Msg],
@@ -686,12 +684,12 @@ impl Receiver {
         Ok((table, payload))
     }
 
-    // For Large sets, bucketizes using Cuckoo Hashing while mapping to Megabins. The Megabin index
-    // is computed from the regular CH index:
-    //            new_bin_id = ch_id % megabin_size; // the bin within the megabin
-    //            megabin_id =  ch_id / megabin_size;
-    // A megabin is a collection of bins, typically specified by the total number of elements that
-    // can be handled at a time (megabin_size).
+    /// For Large sets, bucketizes using Cuckoo Hashing while mapping to Megabins. The Megabin index
+    /// is computed from the regular CH index:
+    ///            new_bin_id = ch_id % megabin_size; // the bin within the megabin
+    ///            megabin_id =  ch_id / megabin_size;
+    /// A megabin is a collection of bins, typically specified by the total number of elements that
+    /// can be handled at a time (megabin_size).
     pub fn bucketize_data_large<C: AbstractChannel, RNG: RngCore + CryptoRng + SeedableRng>(
         &mut self,
         inputs: &[Msg],
@@ -739,7 +737,8 @@ impl Receiver {
 
         Ok((table, payload, nmegabins))
     }
-    // Receive outputs of the OPPRF
+
+    /// Receive outputs of the OPPRF
     pub fn receive_data<C: AbstractChannel, RNG: RngCore + CryptoRng + SeedableRng>(
         &mut self,
         state: &mut ReceiverState,
@@ -751,12 +750,22 @@ impl Receiver {
         Ok(())
     }
 }
-//
+
 impl ReceiverState {
+    /// Encodes circuit inputs before passing them to GC
     pub fn encode_circuit_inputs<C, RNG>(
         &mut self,
-        ev: &mut Evaluator<C, RNG, OtReceiver>,
-    ) -> Result<(Vec<Wire>, Vec<Wire>, Vec<Wire>, Vec<Wire>, Vec<Wire>), Error>
+        ev: &mut Evaluator<C, RNG, OtReceiver, AllWire>,
+    ) -> Result<
+        (
+            Vec<AllWire>,
+            Vec<AllWire>,
+            Vec<AllWire>,
+            Vec<AllWire>,
+            Vec<AllWire>,
+        ),
+        Error,
+    >
     where
         C: AbstractChannel,
         RNG: CryptoRng + RngCore + SeedableRng<Seed = Block>,
@@ -789,17 +798,12 @@ impl ReceiverState {
         ))
     }
 
+    /// Encode inputs & compute weighted aggregates circuit
     pub fn build_and_compute_circuit<C, RNG>(
         &mut self,
-        ev: &mut Evaluator<C, RNG, OtReceiver>,
+        ev: &mut Evaluator<C, RNG, OtReceiver, AllWire>,
         channel: &mut C,
-    ) -> Result<
-        (
-            CrtBundle<fancy_garbling::Wire>,
-            CrtBundle<fancy_garbling::Wire>,
-        ),
-        Error,
-    >
+    ) -> Result<(CrtBundle<AllWire>, CrtBundle<AllWire>), Error>
     where
         C: AbstractChannel,
         RNG: RngCore + CryptoRng + SeedableRng<Seed = Block>,
@@ -871,7 +875,9 @@ fn encode_opprf_payload(opprf_ids: &[Block512]) -> Vec<u16> {
 /// Fancy function to compute a weighted average for matching ID's
 /// where one party provides the weights and the other
 //  the values
-fn fancy_compute_payload_aggregate<F: fancy_garbling::FancyReveal + Fancy>(
+fn fancy_compute_payload_aggregate<
+    F: fancy_garbling::FancyReveal + Fancy + ArithmeticBundleGadgets + FancyBinary,
+>(
     f: &mut F,
     sender_inputs: &[F::Item],
     receiver_inputs: &[F::Item],
@@ -952,11 +958,7 @@ fn block512_to_crt(b: Block512) -> Vec<u16> {
 
 // Assumes payloads are up to 64bit long
 // WRITE assumption more
-fn mask_payload_crt<RNG: rand::Rng + Sized>(
-    x: Block512,
-    y: Block512,
-    rng: &mut RNG,
-) -> Block512 {
+fn mask_payload_crt<RNG: rand::Rng + Sized>(x: Block512, y: Block512, rng: &mut RNG) -> Block512 {
     let x_crt = block512_to_crt(x);
     let y_crt = block512_to_crt(y);
     let q = fancy_garbling::util::primes_with_width(64);
@@ -976,6 +978,7 @@ fn mask_payload_crt<RNG: rand::Rng + Sized>(
     Block512::from(block)
 }
 
+/// Parse files for PSTY Payload computation.
 pub fn parse_files(
     id_position: usize,
     payload_position: usize,
@@ -1030,18 +1033,17 @@ impl SemiHonest for Receiver {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::{rand_u64_vec};
+    use crate::utils::rand_u64_vec;
     use fancy_garbling::util::generate_deltas;
+    use rand::{prelude::SliceRandom, thread_rng};
     use scuttlebutt::{AesRng, Block512, Channel, SymChannel};
     use std::{
         collections::HashMap,
-        convert::TryInto,
         fs::File,
         io::{BufReader, BufWriter, Write},
         net::{TcpListener, TcpStream},
         os::unix::net::UnixStream,
     };
-    use rand::{thread_rng, prelude::SliceRandom};
 
     const ITEM_SIZE: usize = 8;
 
@@ -1055,7 +1057,6 @@ mod tests {
         }
         ids
     }
-
 
     fn weighted_mean_clear(
         ids_client: &[Vec<u8>],
@@ -1170,7 +1171,7 @@ mod tests {
         );
 
         let qs = fancy_garbling::util::primes_with_width(65);
-        let deltas = generate_deltas(&qs);
+        let deltas = generate_deltas::<AllWire>(&qs);
         let deltas_json = serde_json::to_string(&deltas).unwrap();
 
         let path_delta = "./.deltas.txt".to_owned();

@@ -1,29 +1,19 @@
-// -*- mode: rust; -*-
-//
-// This file is part of ocelot.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Implementation of the Keller-Orsini-Scholl oblivious transfer extension
 //! protocol (cf. <https://eprint.iacr.org/2015/546>).
 
 use crate::{
     errors::Error,
+    ot::FixedKeyInitializer,
     ot::{
         alsz::{Receiver as AlszReceiver, Sender as AlszSender},
-        CorrelatedReceiver,
-        CorrelatedSender,
-        FixedKeyInitializer,
-        RandomReceiver,
-        RandomSender,
-        Receiver as OtReceiver,
+        CorrelatedReceiver, CorrelatedSender, RandomReceiver, RandomSender, Receiver as OtReceiver,
         Sender as OtSender,
     },
     utils,
 };
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use scuttlebutt::{cointoss, AbstractChannel, AesRng, Block, Malicious, SemiHonest};
-use std::{convert::TryInto, io::ErrorKind};
+use std::io::ErrorKind;
 
 // The statistical security parameter.
 const SSP: usize = 40;

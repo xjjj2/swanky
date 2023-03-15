@@ -1,20 +1,8 @@
-// -*- mode: rust; -*-
-//
-// This file is part of ocelot.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Oblivious transfer benchmarks using `criterion`.
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ocelot::ot::{
-    self,
-    CorrelatedReceiver,
-    CorrelatedSender,
-    RandomReceiver,
-    RandomSender,
-    Receiver,
-    Sender,
+    self, CorrelatedReceiver, CorrelatedSender, RandomReceiver, RandomSender, Receiver, Sender,
 };
 use scuttlebutt::{AesRng, Block, Channel};
 use std::{

@@ -1,17 +1,13 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `fancy-garbling`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Dummy implementation of `Fancy`.
 //!
 //! Useful for evaluating the circuits produced by `Fancy` without actually
 //! creating any circuits.
 
 use crate::{
+    check_binary, derive_binary,
     errors::{DummyError, FancyError},
     fancy::{Fancy, FancyInput, FancyReveal, HasModulus},
+    FancyArithmetic, FancyBinary,
 };
 
 /// Simple struct that performs the fancy computation over `u16`.
@@ -76,14 +72,9 @@ impl FancyInput for Dummy {
     }
 }
 
-impl Fancy for Dummy {
-    type Item = DummyVal;
-    type Error = DummyError;
+derive_binary!(Dummy);
 
-    fn constant(&mut self, val: u16, modulus: u16) -> Result<DummyVal, Self::Error> {
-        Ok(DummyVal { val, modulus })
-    }
-
+impl FancyArithmetic for Dummy {
     fn add(&mut self, x: &DummyVal, y: &DummyVal) -> Result<DummyVal, Self::Error> {
         if x.modulus() != y.modulus() {
             return Err(Self::Error::from(FancyError::UnequalModuli));
@@ -131,6 +122,15 @@ impl Fancy for Dummy {
         let val = tt[x.val as usize];
         Ok(DummyVal { val, modulus })
     }
+}
+
+impl Fancy for Dummy {
+    type Item = DummyVal;
+    type Error = DummyError;
+
+    fn constant(&mut self, val: u16, modulus: u16) -> Result<DummyVal, Self::Error> {
+        Ok(DummyVal { val, modulus })
+    }
 
     fn output(&mut self, x: &DummyVal) -> Result<Option<u16>, Self::Error> {
         Ok(Some(x.val))
@@ -147,7 +147,7 @@ impl FancyReveal for Dummy {
 mod bundle {
     use super::*;
     use crate::{
-        fancy::{BinaryGadgets, Bundle, BundleGadgets, CrtGadgets},
+        fancy::{ArithmeticBundleGadgets, BinaryGadgets, Bundle, BundleGadgets, CrtGadgets},
         util::{self, RngExt},
     };
     use itertools::Itertools;
@@ -405,6 +405,27 @@ mod bundle {
     }
 
     #[test]
+    fn binary_lt_signed() {
+        let mut rng = thread_rng();
+        let nbits = 16;
+        let q = 1 << nbits;
+        for _ in 0..NITERS {
+            let x = rng.gen_u128() % q;
+            let y = rng.gen_u128() % q;
+            let should_be = (x as i16) < (y as i16);
+            let mut d = Dummy::new();
+            let out;
+            {
+                let x = d.bin_encode(x, nbits).unwrap();
+                let y = d.bin_encode(y, nbits).unwrap();
+                let z = d.bin_lt_signed(&x, &y).unwrap();
+                out = d.output(&z).unwrap().unwrap();
+            }
+            assert_eq!(out > 0, should_be, "x={} y={}", x as i16, y as i16);
+        }
+    }
+
+    #[test]
     fn binary_max() {
         let mut rng = thread_rng();
         let n = 10;
@@ -537,10 +558,74 @@ mod bundle {
             {
                 let x = d.bin_encode(x, nbits).unwrap();
                 let y = d.bin_encode(y, nbits).unwrap();
+                let z = d.bin_eq_bundles(&x, &y).unwrap();
+                out = d.output(&z).unwrap().unwrap();
+            }
+            assert_eq!(out, (x == y) as u16);
+        }
+    }
+
+    #[test]
+    fn binary_proj_eq() {
+        let mut rng = thread_rng();
+        for _ in 0..NITERS {
+            let nbits = rng.gen_usize() % 100 + 2;
+            let q = 1 << nbits;
+            let x = rng.gen_u128() % q;
+            let y = if rng.gen_bool() {
+                x
+            } else {
+                rng.gen_u128() % q
+            };
+            let mut d = Dummy::new();
+            let out;
+            {
+                let x = d.bin_encode(x, nbits).unwrap();
+                let y = d.bin_encode(y, nbits).unwrap();
                 let z = d.eq_bundles(&x, &y).unwrap();
                 out = d.output(&z).unwrap().unwrap();
             }
             assert_eq!(out, (x == y) as u16);
+        }
+    }
+
+    #[test]
+    fn binary_rsa() {
+        let mut rng = thread_rng();
+        for _ in 0..NITERS {
+            let nbits = 64;
+            let q = 1 << nbits;
+            let x = rng.gen_u128() % q;
+            let shift_size = rng.gen_usize() % nbits;
+            let mut d = Dummy::new();
+            let out;
+            {
+                let x = d.bin_encode(x, nbits).unwrap();
+                let z = d.bin_rsa(&x, shift_size).unwrap();
+                out = d.bin_output(&z).unwrap().unwrap() as i64;
+            }
+            let should_be = (x as i64) >> shift_size;
+            assert_eq!(out, should_be);
+        }
+    }
+
+    #[test]
+    fn binary_rsl() {
+        let mut rng = thread_rng();
+        for _ in 0..NITERS {
+            let nbits = 64;
+            let q = 1 << nbits;
+            let x = rng.gen_u128() % q;
+            let shift_size = rng.gen_usize() % nbits;
+            let mut d = Dummy::new();
+            let out;
+            {
+                let x = d.bin_encode(x, nbits).unwrap();
+                let z = d.bin_rsl(&x, shift_size).unwrap();
+                out = d.bin_output(&z).unwrap().unwrap();
+            }
+            let should_be = x >> shift_size;
+            assert_eq!(out, should_be);
         }
     }
 
@@ -617,7 +702,7 @@ mod pmr_tests {
     #[test]
     fn pmr() {
         let mut rng = rand::thread_rng();
-        for _ in 0..16 {
+        for _ in 0..8 {
             let ps = rng.gen_usable_factors();
             let q = crate::util::product(&ps);
             let pt = rng.gen_u128() % q;

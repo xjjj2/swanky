@@ -1,9 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of ocelot.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Implementation of the batched, related-key oblivious pseudorandom function
 //! (BaRK-OPRF) protocol of Kolesnikov, Kumaresan, Rosulek, and Trieu (cf.
 //! <https://eprint.iacr.org/2016/799>, Figure 2).
@@ -19,15 +13,9 @@ use crate::{
 };
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use scuttlebutt::{
-    cointoss,
-    utils as scutils,
-    AbstractChannel,
-    AesRng,
-    Block,
-    Block512,
-    SemiHonest,
+    cointoss, utils as scutils, AbstractChannel, AesRng, Block, Block512, SemiHonest,
 };
-use std::{convert::TryInto, marker::PhantomData};
+use std::marker::PhantomData;
 
 /// KKRT oblivious PRF sender.
 pub struct Sender<OT: OtReceiver + SemiHonest> {

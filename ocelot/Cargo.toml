@@ -1,33 +1,40 @@
 [package]
 name = "ocelot"
-version = "0.4.0"
-authors = ["Alex J. Malozemoff <amaloz@galois.com>"]
-license = "MIT"
 readme = "README.md"
 description = "A library for oblivious transfer protocols"
 categories = ["cryptography"]
 keywords = ["cryptography", "oblivious-transfer", "OT"]
-edition = "2018"
-publish = false
-build = "build.rs"
 autoexamples = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+version.workspace = true
 
 [lib]
 
 [features]
-nightly = ["curve25519-dalek/avx2_backend", "rand/nightly", "scuttlebutt/nightly"]
+nightly = ["curve25519-dalek/nightly", "curve25519-dalek/simd_backend", "scuttlebutt/nightly"]
+
 
 [dependencies]
-curve25519-dalek = { version = "2", features = ["std"] }
-libc = "0.2"
-rand = "0.7"
-scuttlebutt = { path = "../scuttlebutt", features = ["curve25519-dalek"] }
+blake3.workspace = true
+curve25519-dalek = { package = "curve25519-dalek-ng", workspace = true }
+rand.workspace = true
+scuttlebutt = { workspace = true, features = ["curve25519-dalek"] }
+vectoreyes.workspace = true
+generic-array.workspace = true
+subtle.workspace = true
+bytemuck.workspace = true
 
 [build-dependencies]
-cc = "1.0"
+cc.workspace = true
 
 [dev-dependencies]
-criterion = "0.2"
+criterion.workspace = true
+nix.workspace = true
+proptest.workspace = true
+clap.workspace = true
 
 [[bench]]
 name = "ot"
@@ -35,6 +42,10 @@ harness = false
 
 [[bench]]
 name = "oprf"
+harness = false
+
+[[bench]]
+name = "svole"
 harness = false
 
 [[example]]

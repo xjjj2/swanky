@@ -1,43 +1,25 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `fancy-garbling`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Tools useful for interacting with `fancy-garbling`.
 //!
 //! Note: all number representations in this library are little-endian.
 
-use crate::Wire;
-#[cfg(feature = "nightly")]
-use core::arch::x86_64::*;
 use itertools::Itertools;
 use scuttlebutt::Block;
 use std::collections::HashMap;
+use vectoreyes::{SimdBase, U64x2, U8x16};
+
+use crate::WireLabel;
 
 ////////////////////////////////////////////////////////////////////////////////
 // tweak functions for garbling
 
 /// Tweak function for a single item.
-#[cfg(feature = "nightly")]
 pub fn tweak(i: usize) -> Block {
-    let data = unsafe { _mm_set_epi64x(0, (i as u64) as i64) };
-    Block(data)
-}
-#[cfg(not(feature = "nightly"))]
-pub fn tweak(i: usize) -> Block {
-    Block::from(i as u128)
+    Block::from(U8x16::from(U64x2::set_lo(i as u64)))
 }
 
 /// Tweak function for two items.
-#[cfg(feature = "nightly")]
 pub fn tweak2(i: u64, j: u64) -> Block {
-    let data = unsafe { _mm_set_epi64x(i as i64, j as i64) };
-    Block(data)
-}
-#[cfg(not(feature = "nightly"))]
-pub fn tweak2(i: u64, j: u64) -> Block {
-    Block::from(((i as u128) << 64) + j as u128)
+    Block::from(U8x16::from(U64x2::from([j, i])))
 }
 
 /// Compute the output tweak for a garbled gate where i is the gate id and k is the value.
@@ -364,8 +346,8 @@ pub fn is_power_of_2(x: u16) -> bool {
     (x & (x - 1)) == 0
 }
 
-// Generate deltas for GC
-pub fn generate_deltas(primes: &[u16]) -> HashMap<u16, Wire> {
+/// Generate deltas ahead of time for the Garbler.
+pub fn generate_deltas<Wire: WireLabel>(primes: &[u16]) -> HashMap<u16, Wire> {
     let mut deltas = HashMap::new();
     let mut rng = rand::thread_rng();
     for q in primes {

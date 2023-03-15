@@ -1,9 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `scuttlebutt`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 use crate::{AbstractChannel, Channel};
 use sha2::{Digest, Sha256};
 use std::io::{Read, Result, Write};
@@ -26,7 +20,7 @@ impl<R: Read, W: Write> HashChannel<R, W> {
     /// Consume the channel and output the hash of all the communication.
     pub fn finish(self) -> [u8; 32] {
         let mut h = [0u8; 32];
-        h.copy_from_slice(&self.hash.result());
+        h.copy_from_slice(&self.hash.finalize());
         h
     }
 }
@@ -34,14 +28,14 @@ impl<R: Read, W: Write> HashChannel<R, W> {
 impl<R: Read, W: Write> AbstractChannel for HashChannel<R, W> {
     #[inline]
     fn write_bytes(&mut self, bytes: &[u8]) -> Result<()> {
-        self.hash.input(bytes);
+        self.hash.update(bytes);
         self.channel.write_bytes(bytes)
     }
 
     #[inline]
     fn read_bytes(&mut self, mut bytes: &mut [u8]) -> Result<()> {
         self.channel.read_bytes(&mut bytes)?;
-        self.hash.input(&bytes);
+        self.hash.update(&bytes);
         Ok(())
     }
 

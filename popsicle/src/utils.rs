@@ -1,18 +1,13 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `popsicle`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
+//! Util mostly in support of cuckoo hashing.
 
 use rand::{CryptoRng, Rng};
 use scuttlebutt::{AesHash, Block};
 use sha2::{Digest, Sha256};
 
-// Compress an arbitrary vector into a 128-bit chunk, leaving the final 8-bits
-// as zero. We need to leave 8 bits free in order to add in the hash index when
-// running the OPRF (cf. <https://eprint.iacr.org/2016/799>, §5.2).
+/// Compress an arbitrary vector into a 128-bit chunk, leaving the final 8-bits
+/// as zero. We need to leave 8 bits free in order to add in the hash index when
+/// running the OPRF (cf. <https://eprint.iacr.org/2016/799>, §5.2).
 pub fn compress_and_hash_inputs(inputs: &[Vec<u8>], key: Block) -> Vec<Block> {
-    let mut hasher = Sha256::new(); // XXX can we do better than using SHA-256?
     let aes = AesHash::new(key);
     let mask = Block::from(0xFFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FF00);
     inputs
@@ -25,8 +20,9 @@ pub fn compress_and_hash_inputs(inputs: &[Vec<u8>], key: Block) -> Vec<Block> {
                 digest[0..input.len()].copy_from_slice(input);
             } else {
                 // Hash `input` first.
-                hasher.input(input);
-                let h = hasher.result_reset();
+                let mut hasher = Sha256::new(); // XXX can we do better than using SHA-256?
+                hasher.update(input);
+                let h = hasher.finalize();
                 digest[0..16].copy_from_slice(&h[0..16]);
             }
             let block = aes.cr_hash(Block::from(i as u128), Block::from(digest));
@@ -35,16 +31,20 @@ pub fn compress_and_hash_inputs(inputs: &[Vec<u8>], key: Block) -> Vec<Block> {
         .collect::<Vec<Block>>()
 }
 
-#[allow(dead_code)] // used in tests
+#[allow(dead_code)]
+/// used in tests
 pub fn rand_vec<RNG: CryptoRng + Rng>(n: usize, rng: &mut RNG) -> Vec<u8> {
     (0..n).map(|_| rng.gen()).collect()
 }
 
-#[allow(dead_code)] // used in tests
+#[allow(dead_code)]
+/// used in tests
 pub fn rand_vec_vec<RNG: CryptoRng + Rng>(n: usize, m: usize, rng: &mut RNG) -> Vec<Vec<u8>> {
     (0..n).map(|_| rand_vec(m, rng)).collect()
 }
+
 #[allow(dead_code)]
+/// used in tests
 pub fn rand_u64_vec<RNG: CryptoRng + Rng>(n: usize, modulus: u64, rng: &mut RNG) -> Vec<u64> {
     (0..n).map(|_| rng.gen::<u64>() % modulus).collect()
 }

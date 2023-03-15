@@ -1,43 +1,47 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `fancy-garbling`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Provides objects and functions for statically garbling and evaluating a
 //! circuit without streaming.
 
 use crate::{
-    circuit::Circuit,
+    circuit::EvaluableCircuit,
     errors::{EvaluatorError, GarblerError},
-    fancy::HasModulus,
     garble::{Evaluator, Garbler},
-    wire::Wire,
+    WireLabel,
 };
 use itertools::Itertools;
 use scuttlebutt::{AbstractChannel, AesRng, Block, Channel};
-use std::{collections::HashMap, convert::TryInto, rc::Rc};
+use std::{collections::HashMap, marker::PhantomData, rc::Rc};
 
 /// Static evaluator for a circuit, created by the `garble` function.
 ///
 /// Uses `Evaluator` under the hood to actually implement the evaluation.
 #[derive(Debug)]
-#[cfg_attr(feature = "serde1", derive(serde::Serialize, serde::Deserialize))]
-pub struct GarbledCircuit {
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct GarbledCircuit<W, C> {
     blocks: Vec<Block>,
+    _phantom_wire: PhantomData<W>,
+    _phantom_circ: PhantomData<C>,
 }
 
-impl GarbledCircuit {
+impl<W, C> GarbledCircuit<W, C> {
     /// Create a new object from a vector of garbled gates and constant wires.
     pub fn new(blocks: Vec<Block>) -> Self {
-        GarbledCircuit { blocks }
+        GarbledCircuit {
+            blocks,
+            _phantom_wire: PhantomData,
+            _phantom_circ: PhantomData,
+        }
     }
 
     /// The number of garbled rows and constant wires in the garbled circuit.
     pub fn size(&self) -> usize {
         self.blocks.len()
     }
+}
 
+type Ev<Wire> = Evaluator<Channel<GarbledReader, GarbledWriter>, Wire>;
+type Gb<Wire> = Garbler<Channel<GarbledReader, GarbledWriter>, AesRng, Wire>;
+
+impl<Wire: WireLabel, Circuit: EvaluableCircuit<Ev<Wire>>> GarbledCircuit<Wire, Circuit> {
     /// Evaluate the garbled circuit.
     pub fn eval(
         &self,
@@ -53,10 +57,12 @@ impl GarbledCircuit {
 }
 
 /// Garble a circuit without streaming.
-pub fn garble(c: &Circuit) -> Result<(Encoder, GarbledCircuit), GarblerError> {
+pub fn garble<Wire: WireLabel, Circuit: EvaluableCircuit<Gb<Wire>>>(
+    c: &Circuit,
+) -> Result<(Encoder<Wire>, GarbledCircuit<Wire, Circuit>), GarblerError> {
     let channel = Channel::new(
         GarbledReader::new(&[]),
-        GarbledWriter::new(Some(c.num_nonfree_gates)),
+        GarbledWriter::new(Some(c.get_num_nonfree_gates())),
     );
     let channel_ = channel.clone();
 
@@ -99,14 +105,14 @@ pub fn garble(c: &Circuit) -> Result<(Encoder, GarbledCircuit), GarblerError> {
 
 /// Encode inputs statically.
 #[derive(Debug)]
-#[cfg_attr(feature = "serde1", derive(serde::Serialize, serde::Deserialize))]
-pub struct Encoder {
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Encoder<Wire> {
     garbler_inputs: Vec<Wire>,
     evaluator_inputs: Vec<Wire>,
     deltas: HashMap<u16, Wire>,
 }
 
-impl Encoder {
+impl<Wire: WireLabel> Encoder<Wire> {
     /// Make a new `Encoder` from lists of garbler and evaluator inputs,
     /// alongside a map of moduli-to-wire-offsets.
     pub fn new(
@@ -169,7 +175,7 @@ impl Encoder {
 
 /// Implementation of the `Read` trait for use by the `Evaluator`.
 #[derive(Debug)]
-struct GarbledReader {
+pub struct GarbledReader {
     blocks: Vec<Block>,
     index: usize,
 }

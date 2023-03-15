@@ -1,9 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `fancy-garbling`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Structs and functions for creating, streaming, and evaluating garbled circuits.
 
 mod evaluator;
@@ -17,10 +11,11 @@ pub use crate::garble::{evaluator::Evaluator, garbler::Garbler};
 #[cfg(test)]
 mod nonstreaming {
     use crate::{
-        circuit::{Circuit, CircuitBuilder},
+        circuit::{eval_plain, ArithmeticCircuit, CircuitBuilder, CircuitType},
         classic::garble,
-        fancy::{Bundle, BundleGadgets, Fancy},
+        fancy::{ArithmeticBundleGadgets, Bundle, BundleGadgets, Fancy},
         util::{self, RngExt},
+        AllWire, FancyArithmetic, FancyBinary,
     };
     use itertools::Itertools;
     use rand::{thread_rng, SeedableRng};
@@ -29,13 +24,13 @@ mod nonstreaming {
     // helper
     fn garble_test_helper<F>(f: F)
     where
-        F: Fn(u16) -> Circuit,
+        F: Fn(u16) -> ArithmeticCircuit,
     {
         let mut rng = thread_rng();
         for _ in 0..16 {
             let q = rng.gen_prime();
-            let mut c = &mut f(q);
-            let (en, ev) = garble(&mut c).unwrap();
+            let c = &mut f(q);
+            let (en, ev) = garble::<AllWire, _>(c).unwrap();
             for _ in 0..16 {
                 let mut inps = Vec::new();
                 for i in 0..c.num_evaluator_inputs() {
@@ -45,10 +40,10 @@ mod nonstreaming {
                 }
                 // Run the garbled circuit evaluator.
                 let xs = &en.encode_evaluator_inputs(&inps);
-                let decoded = &ev.eval(&mut c, &[], xs).unwrap();
+                let decoded = &ev.eval(c, &[], xs).unwrap();
 
                 // Run the dummy evaluator.
-                let should_be = c.eval_plain(&[], &inps).unwrap();
+                let should_be = eval_plain(c, &[], &inps).unwrap();
                 assert_eq!(decoded[0], should_be[0]);
             }
         }
@@ -80,7 +75,7 @@ mod nonstreaming {
     #[test] // or_many
     fn or_many() {
         garble_test_helper(|_| {
-            let mut b = CircuitBuilder::new();
+            let mut b: CircuitBuilder<ArithmeticCircuit> = CircuitBuilder::new();
             let xs = b.evaluator_inputs(&vec![2; 16]);
             let z = b.or_many(&xs).unwrap();
             b.output(&z).unwrap();
@@ -184,14 +179,14 @@ mod nonstreaming {
             b.output(&z).unwrap();
             let mut c = b.finish();
 
-            let (en, ev) = garble(&mut c).unwrap();
+            let (en, ev) = garble::<AllWire, _>(&mut c).unwrap();
 
             for x in 0..q {
                 for y in 0..ymod {
                     println!("TEST x={} y={}", x, y);
                     let xs = &en.encode_evaluator_inputs(&[x, y]);
                     let decoded = &ev.eval(&mut c, &[], xs).unwrap();
-                    let should_be = c.eval_plain(&[], &[x, y]).unwrap();
+                    let should_be = eval_plain(&c, &[], &[x, y]).unwrap();
                     assert_eq!(decoded[0], should_be[0]);
                 }
             }
@@ -213,7 +208,7 @@ mod nonstreaming {
         b.output_bundle(&z).unwrap();
         let mut circ = b.finish();
 
-        let (en, ev) = garble(&mut circ).unwrap();
+        let (en, ev) = garble::<AllWire, _>(&mut circ).unwrap();
         println!("mods={:?} nargs={} size={}", mods, nargs, ev.size());
 
         let Q: u128 = mods.iter().map(|&q| q as u128).product();
@@ -244,11 +239,11 @@ mod nonstreaming {
         let y = b.constant(c, q).unwrap();
         b.output(&y).unwrap();
 
-        let mut circ = b.finish();
-        let (_, ev) = garble(&mut circ).unwrap();
+        let mut circ: ArithmeticCircuit = b.finish();
+        let (_, ev) = garble::<AllWire, _>(&mut circ).unwrap();
 
         for _ in 0..64 {
-            let outputs = circ.eval_plain(&[], &[]).unwrap();
+            let outputs = eval_plain(&circ, &[], &[]).unwrap();
             assert_eq!(outputs[0], c, "plaintext eval failed");
             let outputs = ev.eval(&mut circ, &[], &[]).unwrap();
             assert_eq!(outputs[0], c, "garbled eval failed");
@@ -269,11 +264,11 @@ mod nonstreaming {
         b.output(&z).unwrap();
 
         let mut circ = b.finish();
-        let (en, ev) = garble(&mut circ).unwrap();
+        let (en, ev) = garble::<AllWire, _>(&mut circ).unwrap();
 
         for _ in 0..64 {
             let x = rng.gen_u16() % q;
-            let outputs = circ.eval_plain(&[], &[x]).unwrap();
+            let outputs = eval_plain(&circ, &[], &[x]).unwrap();
             assert_eq!(outputs[0], (x + c) % q, "plaintext");
 
             let X = en.encode_evaluator_inputs(&[x]);
@@ -288,11 +283,7 @@ mod streaming {
     use crate::{
         dummy::{Dummy, DummyVal},
         util::RngExt,
-        Evaluator,
-        Fancy,
-        FancyInput,
-        Garbler,
-        Wire,
+        AllWire, Evaluator, FancyArithmetic, FancyInput, Garbler, WireLabel,
     };
     use itertools::Itertools;
     use rand::thread_rng;
@@ -300,14 +291,18 @@ mod streaming {
 
     // helper - checks that Streaming evaluation of a fancy function equals Dummy
     // evaluation of the same function
-    fn streaming_test<FGB, FEV, FDU>(
+    fn streaming_test<FGB, FEV, FDU, Wire>(
         mut f_gb: FGB,
         mut f_ev: FEV,
         mut f_du: FDU,
         input_mods: &[u16],
     ) where
-        FGB: FnMut(&mut Garbler<UnixChannel, AesRng>, &[Wire]) -> Option<u16> + Send + Sync,
-        FEV: FnMut(&mut Evaluator<UnixChannel>, &[Wire]) -> Option<u16>,
+        Wire: WireLabel,
+        FGB: FnMut(&mut Garbler<UnixChannel, AesRng, Wire>, &[Wire]) -> Option<u16>
+            + Send
+            + Sync
+            + 'static,
+        FEV: FnMut(&mut Evaluator<UnixChannel, Wire>, &[Wire]) -> Option<u16>,
         FDU: FnMut(&mut Dummy, &[DummyVal]) -> Option<u16>,
     {
         let mut rng = AesRng::new();
@@ -320,31 +315,29 @@ mod streaming {
 
         let (sender, receiver) = unix_channel_pair();
 
-        crossbeam::scope(|s| {
-            s.spawn(move |_| {
-                let mut gb = Garbler::new(sender, rng);
-                let (gb_inp, ev_inp) = gb.encode_many_wires(&inputs, &input_mods).unwrap();
-                for w in ev_inp.iter() {
-                    gb.send_wire(w).unwrap();
-                }
-                f_gb(&mut gb, &gb_inp);
-            });
+        let input_mods_ = input_mods.to_vec();
+        std::thread::spawn(move || {
+            let mut gb = Garbler::new(sender, rng);
+            let (gb_inp, ev_inp) = gb.encode_many_wires(&inputs, &input_mods_).unwrap();
+            for w in ev_inp.iter() {
+                gb.send_wire(w).unwrap();
+            }
+            f_gb(&mut gb, &gb_inp);
+        });
 
-            let mut ev = Evaluator::new(receiver);
-            let ev_inp = input_mods
-                .iter()
-                .map(|q| ev.read_wire(*q).unwrap())
-                .collect_vec();
-            let result = f_ev(&mut ev, &ev_inp).unwrap();
+        let mut ev = Evaluator::new(receiver);
+        let ev_inp = input_mods
+            .iter()
+            .map(|q| ev.read_wire(*q).unwrap())
+            .collect_vec();
+        let result = f_ev(&mut ev, &ev_inp).unwrap();
 
-            assert_eq!(result, should_be)
-        })
-        .unwrap();
+        assert_eq!(result, should_be)
     }
 
     #[test]
     fn addition() {
-        fn fancy_addition<F: Fancy>(b: &mut F, xs: &[F::Item]) -> Option<u16> {
+        fn fancy_addition<F: FancyArithmetic>(b: &mut F, xs: &[F::Item]) -> Option<u16> {
             let z = b.add(&xs[0], &xs[1]).unwrap();
             b.output(&z).unwrap()
         }
@@ -353,8 +346,8 @@ mod streaming {
         for _ in 0..16 {
             let q = rng.gen_modulus();
             streaming_test(
-                move |b, xs| fancy_addition(b, xs),
-                move |b, xs| fancy_addition(b, xs),
+                move |b, xs: &[AllWire]| fancy_addition(b, xs),
+                move |b, xs: &[AllWire]| fancy_addition(b, xs),
                 move |b, xs| fancy_addition(b, xs),
                 &[q, q],
             );
@@ -363,7 +356,7 @@ mod streaming {
 
     #[test]
     fn subtraction() {
-        fn fancy_subtraction<F: Fancy>(b: &mut F, xs: &[F::Item]) -> Option<u16> {
+        fn fancy_subtraction<F: FancyArithmetic>(b: &mut F, xs: &[F::Item]) -> Option<u16> {
             let z = b.sub(&xs[0], &xs[1]).unwrap();
             b.output(&z).unwrap()
         }
@@ -372,8 +365,8 @@ mod streaming {
         for _ in 0..16 {
             let q = rng.gen_modulus();
             streaming_test(
-                move |b, xs| fancy_subtraction(b, xs),
-                move |b, xs| fancy_subtraction(b, xs),
+                move |b, xs: &[AllWire]| fancy_subtraction(b, xs),
+                move |b, xs: &[AllWire]| fancy_subtraction(b, xs),
                 move |b, xs| fancy_subtraction(b, xs),
                 &[q, q],
             );
@@ -382,7 +375,7 @@ mod streaming {
 
     #[test]
     fn multiplication() {
-        fn fancy_multiplication<F: Fancy>(b: &mut F, xs: &[F::Item]) -> Option<u16> {
+        fn fancy_multiplication<F: FancyArithmetic>(b: &mut F, xs: &[F::Item]) -> Option<u16> {
             let z = b.mul(&xs[0], &xs[1]).unwrap();
             b.output(&z).unwrap()
         }
@@ -391,8 +384,8 @@ mod streaming {
         for _ in 0..16 {
             let q = rng.gen_modulus();
             streaming_test(
-                move |b, xs| fancy_multiplication(b, xs),
-                move |b, xs| fancy_multiplication(b, xs),
+                move |b, xs: &[AllWire]| fancy_multiplication(b, xs),
+                move |b, xs: &[AllWire]| fancy_multiplication(b, xs),
                 move |b, xs| fancy_multiplication(b, xs),
                 &[q, q],
             );
@@ -401,7 +394,7 @@ mod streaming {
 
     #[test]
     fn cmul() {
-        fn fancy_cmul<F: Fancy>(b: &mut F, xs: &[F::Item]) -> Option<u16> {
+        fn fancy_cmul<F: FancyArithmetic>(b: &mut F, xs: &[F::Item]) -> Option<u16> {
             let z = b.cmul(&xs[0], 5).unwrap();
             b.output(&z).unwrap()
         }
@@ -410,8 +403,8 @@ mod streaming {
         for _ in 0..16 {
             let q = rng.gen_modulus();
             streaming_test(
-                move |b, xs| fancy_cmul(b, xs),
-                move |b, xs| fancy_cmul(b, xs),
+                move |b, xs: &[AllWire]| fancy_cmul(b, xs),
+                move |b, xs: &[AllWire]| fancy_cmul(b, xs),
                 move |b, xs| fancy_cmul(b, xs),
                 &[q],
             );
@@ -420,7 +413,7 @@ mod streaming {
 
     #[test]
     fn proj() {
-        fn fancy_projection<F: Fancy>(b: &mut F, xs: &[F::Item], q: u16) -> Option<u16> {
+        fn fancy_projection<F: FancyArithmetic>(b: &mut F, xs: &[F::Item], q: u16) -> Option<u16> {
             let tab = (0..q).map(|i| (i + 1) % q).collect_vec();
             let z = b.proj(&xs[0], q, Some(tab)).unwrap();
             b.output(&z).unwrap()
@@ -430,8 +423,8 @@ mod streaming {
         for _ in 0..16 {
             let q = rng.gen_modulus();
             streaming_test(
-                move |b, xs| fancy_projection(b, xs, q),
-                move |b, xs| fancy_projection(b, xs, q),
+                move |b, xs: &[AllWire]| fancy_projection(b, xs, q),
+                move |b, xs: &[AllWire]| fancy_projection(b, xs, q),
                 move |b, xs| fancy_projection(b, xs, q),
                 &[q],
             );
@@ -442,20 +435,14 @@ mod streaming {
 #[cfg(test)]
 mod complex {
     use crate::{
-        dummy::Dummy,
-        util::RngExt,
-        CrtBundle,
-        CrtGadgets,
-        Evaluator,
-        Fancy,
-        FancyInput,
-        Garbler,
+        dummy::Dummy, util::RngExt, AllWire, CrtBundle, CrtGadgets, Evaluator, FancyArithmetic,
+        FancyBinary, FancyInput, Garbler,
     };
     use itertools::Itertools;
     use rand::thread_rng;
     use scuttlebutt::{unix_channel_pair, AesRng};
 
-    fn complex_gadget<F: Fancy>(
+    fn complex_gadget<F: FancyArithmetic + FancyBinary>(
         b: &mut F,
         xs: &[CrtBundle<F::Item>],
     ) -> Result<Option<Vec<u128>>, F::Error> {
@@ -492,38 +479,35 @@ mod complex {
             // test streaming garbler and evaluator
             let (sender, receiver) = unix_channel_pair();
 
-            crossbeam::scope(|s| {
-                s.spawn(move |_| {
-                    let mut garbler = Garbler::new(sender, AesRng::new());
+            std::thread::spawn(move || {
+                let mut garbler = Garbler::<_, _, AllWire>::new(sender, AesRng::new());
 
-                    // encode input and send it to the evaluator
-                    let mut gb_inp = Vec::with_capacity(N);
-                    for X in &input {
-                        let (zero, enc) = garbler.crt_encode_wire(*X, Q).unwrap();
-                        for w in enc.iter() {
-                            garbler.send_wire(w).unwrap();
-                        }
-                        gb_inp.push(zero);
+                // encode input and send it to the evaluator
+                let mut gb_inp = Vec::with_capacity(N);
+                for X in &input {
+                    let (zero, enc) = garbler.crt_encode_wire(*X, Q).unwrap();
+                    for w in enc.iter() {
+                        garbler.send_wire(w).unwrap();
                     }
-                    complex_gadget(&mut garbler, &gb_inp).unwrap();
-                });
-
-                let mut evaluator = Evaluator::new(receiver);
-
-                // receive encoded wires from the garbler thread
-                let mut ev_inp = Vec::with_capacity(N);
-                for _ in 0..N {
-                    let ws = qs
-                        .iter()
-                        .map(|q| evaluator.read_wire(*q).unwrap())
-                        .collect_vec();
-                    ev_inp.push(CrtBundle::new(ws));
+                    gb_inp.push(zero);
                 }
+                complex_gadget(&mut garbler, &gb_inp).unwrap();
+            });
 
-                let result = complex_gadget(&mut evaluator, &ev_inp).unwrap();
-                assert_eq!(result, should_be);
-            })
-            .unwrap();
+            let mut evaluator = Evaluator::<_, AllWire>::new(receiver);
+
+            // receive encoded wires from the garbler thread
+            let mut ev_inp = Vec::with_capacity(N);
+            for _ in 0..N {
+                let ws = qs
+                    .iter()
+                    .map(|q| evaluator.read_wire(*q).unwrap())
+                    .collect_vec();
+                ev_inp.push(CrtBundle::new(ws));
+            }
+
+            let result = complex_gadget(&mut evaluator, &ev_inp).unwrap();
+            assert_eq!(result, should_be);
         }
     }
 }

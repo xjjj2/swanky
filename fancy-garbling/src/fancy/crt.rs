@@ -1,16 +1,10 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `fancy-garbling`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Module containing `CrtGadgets`, which are the CRT-based gadgets for `Fancy`.
 
-use super::{Fancy, HasModulus};
+use super::{bundle::ArithmeticBundleGadgets, HasModulus};
 use crate::{
     errors::FancyError,
     fancy::bundle::{Bundle, BundleGadgets},
-    util,
+    util, FancyArithmetic, FancyBinary,
 };
 use itertools::Itertools;
 use std::ops::Deref;
@@ -50,10 +44,12 @@ impl<W: Clone + HasModulus> From<Bundle<W>> for CrtBundle<W> {
     }
 }
 
-impl<F: Fancy> CrtGadgets for F {}
+impl<F: FancyArithmetic + FancyBinary> CrtGadgets for F {}
 
 /// Extension trait for `Fancy` providing advanced CRT gadgets based on bundles of wires.
-pub trait CrtGadgets: Fancy + BundleGadgets {
+pub trait CrtGadgets:
+    FancyArithmetic + FancyBinary + ArithmeticBundleGadgets + BundleGadgets
+{
     /// Creates a bundle of constant wires for the CRT representation of `x` under
     /// composite modulus `q`.
     fn crt_constant_bundle(
@@ -304,10 +300,10 @@ pub trait CrtGadgets: Fancy + BundleGadgets {
         xs: &[CrtBundle<Self::Item>],
         accuracy: &str,
     ) -> Result<CrtBundle<Self::Item>, Self::Error> {
-        if xs.len() < 2 {
+        if xs.len() < 1 {
             return Err(Self::Error::from(FancyError::InvalidArgNum {
                 got: xs.len(),
-                needed: 2,
+                needed: 1,
             }));
         }
         xs.iter().skip(1).fold(Ok(xs[0].clone()), |x, y| {

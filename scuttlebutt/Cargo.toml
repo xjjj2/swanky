@@ -1,32 +1,50 @@
 [package]
 name = "scuttlebutt"
-version = "0.4.0"
-authors = ["Alex J. Malozemoff <amaloz@galois.com>"]
-license = "MIT"
 readme = "README.md"
 description = "A library of useful multi-party computation utilities"
 keywords = ["cryptography", "MPC", "secure-computation"]
 categories = ["cryptography"]
-edition = "2018"
-publish = false
-
-[lib]
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+version.workspace = true
 
 [features]
-nightly = ["curve25519-dalek/avx2_backend", "rand/nightly"]
+ff = ["dep:ff", "dep:ff_codegen", "rand_chacha"]
+nightly = ["curve25519-dalek/nightly", "curve25519-dalek/simd_backend"]
 unstable = []
-serde1 = ["serde"]
+serde = []
 
 [dependencies]
-curve25519-dalek = { version = "2", features = ["std"], optional = true }
-rand = "0.7"
-rand_core = "0.5"
-serde = { version = "1", features = ["derive"], optional = true }
-sha2 = "0.8"
+curve25519-dalek = { package = "curve25519-dalek-ng", workspace = true, optional = true }
+rand.workspace = true
+rand_core.workspace = true
+rand_chacha = { workspace = true, optional = true }
+serde.workspace = true
+sha2.workspace = true
+subtle.workspace = true
+generic-array.workspace = true
+smallvec.workspace = true
+bytemuck = { workspace = true, features = ["derive"] }
+vectoreyes.workspace = true
+ndarray.workspace = true
+num-traits.workspace = true
+ff = { workspace = true, features = ["derive"], optional = true }
+
+[build-dependencies]
+ff_codegen = { workspace = true, optional = true }
+tempfile.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
-criterion = "0.2"
-hex = "0.3"
+criterion.workspace = true
+hex.workspace = true
+proptest.workspace = true
+num-bigint.workspace = true
+serde_json.workspace = true
+bincode.workspace = true
+serde = { workspace = true, features = ["derive"] }
 
 [[bench]]
 name = "aes128"
@@ -54,4 +72,8 @@ harness = false
 
 [[bench]]
 name = "rand_aes"
+harness = false
+
+[[bench]]
+name = "finite_fields"
 harness = false

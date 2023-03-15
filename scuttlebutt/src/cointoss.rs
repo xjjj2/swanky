@@ -1,9 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of `scuttlebutt`.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Implementation of a simple two-party coin tossing protocol using a PRG as a
 //! commitment.
 //!
@@ -89,8 +83,6 @@ pub fn receive<C: AbstractChannel>(channel: &mut C, seeds: &[Block]) -> Result<V
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "nightly")]
-    extern crate test;
     use super::*;
     use crate::Channel;
     use std::{

@@ -1,9 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of twopac.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Implementation of semi-honest two-party computation.
 
 mod evaluator;
@@ -16,19 +10,21 @@ pub use garbler::Garbler;
 mod tests {
     use super::*;
     use crate::{
-        circuit::Circuit,
+        circuit::{eval_plain, BinaryCircuit, CircuitInfo, EvaluableCircuit},
         dummy::Dummy,
         util::RngExt,
-        CrtBundle,
-        CrtGadgets,
-        Fancy,
-        FancyInput,
+        AllWire, CrtBundle, CrtGadgets, FancyArithmetic, FancyBinary, FancyInput, WireLabel,
+        WireMod2,
     };
     use itertools::Itertools;
     use ocelot::ot::{ChouOrlandiReceiver, ChouOrlandiSender};
     use scuttlebutt::{unix_channel_pair, AesRng, UnixChannel};
 
-    fn addition<F: Fancy>(f: &mut F, a: &F::Item, b: &F::Item) -> Result<Option<u16>, F::Error> {
+    fn addition<F: FancyArithmetic>(
+        f: &mut F,
+        a: &F::Item,
+        b: &F::Item,
+    ) -> Result<Option<u16>, F::Error> {
         let c = f.add(&a, &b)?;
         f.output(&c)
     }
@@ -40,17 +36,19 @@ mod tests {
                 let (sender, receiver) = unix_channel_pair();
                 std::thread::spawn(move || {
                     let rng = AesRng::new();
-                    let mut gb =
-                        Garbler::<UnixChannel, AesRng, ChouOrlandiSender>::new(sender, rng)
-                            .unwrap();
+                    let mut gb = Garbler::<UnixChannel, AesRng, ChouOrlandiSender, AllWire>::new(
+                        sender, rng,
+                    )
+                    .unwrap();
                     let x = gb.encode(a, 3).unwrap();
                     let ys = gb.receive_many(&[3]).unwrap();
                     addition(&mut gb, &x, &ys[0]).unwrap();
                 });
                 let rng = AesRng::new();
-                let mut ev =
-                    Evaluator::<UnixChannel, AesRng, ChouOrlandiReceiver>::new(receiver, rng)
-                        .unwrap();
+                let mut ev = Evaluator::<UnixChannel, AesRng, ChouOrlandiReceiver, AllWire>::new(
+                    receiver, rng,
+                )
+                .unwrap();
                 let x = ev.receive(3).unwrap();
                 let ys = ev.encode_many(&[b], &[3]).unwrap();
                 let output = addition(&mut ev, &x, &ys[0]).unwrap().unwrap();
@@ -59,7 +57,10 @@ mod tests {
         }
     }
 
-    fn relu<F: Fancy>(b: &mut F, xs: &[CrtBundle<F::Item>]) -> Option<Vec<u128>> {
+    fn relu<F: FancyArithmetic + FancyBinary>(
+        b: &mut F,
+        xs: &[CrtBundle<F::Item>],
+    ) -> Option<Vec<u128>> {
         let mut outputs = Vec::new();
         for x in xs.iter() {
             let q = x.composite_modulus();
@@ -92,23 +93,33 @@ mod tests {
         std::thread::spawn(move || {
             let rng = AesRng::new();
             let mut gb =
-                Garbler::<UnixChannel, AesRng, ChouOrlandiSender>::new(sender, rng).unwrap();
+                Garbler::<UnixChannel, AesRng, ChouOrlandiSender, AllWire>::new(sender, rng)
+                    .unwrap();
             let xs = gb.crt_encode_many(&input, q).unwrap();
             relu(&mut gb, &xs);
         });
 
         let rng = AesRng::new();
         let mut ev =
-            Evaluator::<UnixChannel, AesRng, ChouOrlandiReceiver>::new(receiver, rng).unwrap();
+            Evaluator::<UnixChannel, AesRng, ChouOrlandiReceiver, AllWire>::new(receiver, rng)
+                .unwrap();
         let xs = ev.crt_receive_many(n, q).unwrap();
         let result = relu(&mut ev, &xs).unwrap();
         assert_eq!(target, result);
     }
 
-    #[test]
-    fn test_aes() {
-        let circ = Circuit::parse("circuits/AES-non-expanded.txt").unwrap();
+    type GB<Wire> = Garbler<UnixChannel, AesRng, ChouOrlandiSender, Wire>;
+    type EV<Wire> = Evaluator<UnixChannel, AesRng, ChouOrlandiReceiver, Wire>;
 
+    fn test_circuit<CIRC, Wire: WireLabel>(circ: CIRC)
+    where
+        CIRC: EvaluableCircuit<Dummy>
+            + EvaluableCircuit<GB<Wire>>
+            + EvaluableCircuit<EV<Wire>>
+            + CircuitInfo
+            + Send
+            + 'static,
+    {
         circ.print_info().unwrap();
 
         let circ_ = circ.clone();
@@ -116,17 +127,39 @@ mod tests {
         let handle = std::thread::spawn(move || {
             let rng = AesRng::new();
             let mut gb =
-                Garbler::<UnixChannel, AesRng, ChouOrlandiSender>::new(sender, rng).unwrap();
+                Garbler::<UnixChannel, AesRng, ChouOrlandiSender, Wire>::new(sender, rng).unwrap();
             let xs = gb.encode_many(&vec![0_u16; 128], &vec![2; 128]).unwrap();
             let ys = gb.receive_many(&vec![2; 128]).unwrap();
             circ_.eval(&mut gb, &xs, &ys).unwrap();
         });
         let rng = AesRng::new();
         let mut ev =
-            Evaluator::<UnixChannel, AesRng, ChouOrlandiReceiver>::new(receiver, rng).unwrap();
+            Evaluator::<UnixChannel, AesRng, ChouOrlandiReceiver, Wire>::new(receiver, rng)
+                .unwrap();
         let xs = ev.receive_many(&vec![2; 128]).unwrap();
         let ys = ev.encode_many(&vec![0_u16; 128], &vec![2; 128]).unwrap();
-        circ.eval(&mut ev, &xs, &ys).unwrap();
+        let out = circ.eval(&mut ev, &xs, &ys).unwrap().unwrap();
         handle.join().unwrap();
+
+        let target = eval_plain(&circ, &vec![0_u16; 128], &vec![0_u16; 128]).unwrap();
+        assert_eq!(out, target);
+    }
+
+    #[test]
+    fn test_aes_arithmetic() {
+        let circ = BinaryCircuit::parse(std::io::Cursor::<&'static [u8]>::new(include_bytes!(
+            "../../../circuits/AES-non-expanded.txt"
+        )))
+        .unwrap();
+        test_circuit::<_, AllWire>(circ);
+    }
+
+    #[test]
+    fn test_aes_binary() {
+        let circ = BinaryCircuit::parse(std::io::Cursor::<&'static [u8]>::new(include_bytes!(
+            "../../../circuits/AES-non-expanded.txt"
+        )))
+        .unwrap();
+        test_circuit::<_, WireMod2>(circ);
     }
 }

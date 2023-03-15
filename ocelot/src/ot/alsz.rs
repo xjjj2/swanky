@@ -1,9 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of ocelot.
-// Copyright © 2019 Galois, Inc.
-// See LICENSE for licensing information.
-
 //! Implementation of the Asharov-Lindell-Schneider-Zohner oblivious transfer
 //! extension protocol (cf. <https://eprint.iacr.org/2016/602>, Protocol 4).
 
@@ -11,28 +5,18 @@
 
 use crate::{
     errors::Error,
+    ot::FixedKeyInitializer,
     ot::{
-        CorrelatedReceiver,
-        CorrelatedSender,
-        FixedKeyInitializer,
-        RandomReceiver,
-        RandomSender,
-        Receiver as OtReceiver,
+        CorrelatedReceiver, CorrelatedSender, RandomReceiver, RandomSender, Receiver as OtReceiver,
         Sender as OtSender,
     },
     utils,
 };
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use scuttlebutt::{
-    utils as scutils,
-    AbstractChannel,
-    AesHash,
-    AesRng,
-    Block,
-    SemiHonest,
-    AES_HASH,
+    utils as scutils, AbstractChannel, AesHash, AesRng, Block, SemiHonest, AES_HASH,
 };
-use std::{convert::TryInto, marker::PhantomData};
+use std::marker::PhantomData;
 
 /// Oblivious transfer sender.
 pub struct Sender<OT: OtReceiver<Msg = Block> + SemiHonest> {

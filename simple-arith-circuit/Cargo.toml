@@ -1,0 +1,28 @@
+[package]
+name = "simple-arith-circuit"
+description = "Simple arithmetic circuit library"
+categories = ["cryptography"]
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+version.workspace = true
+
+[features]
+proptest = ["dep:proptest"]
+serde = ["dep:serde", "scuttlebutt/serde"]
+
+[dependencies]
+scuttlebutt.workspace = true
+rand.workspace = true
+serde = { workspace = true, features = ["derive"], optional = true }
+proptest = { workspace = true, optional = true }
+log.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+bincode.workspace = true
+
+[[bench]]
+name = "reader_scalability"
+harness = false
