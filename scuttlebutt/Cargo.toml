@@ -31,6 +31,8 @@ vectoreyes.workspace = true
 ndarray.workspace = true
 num-traits.workspace = true
 ff = { workspace = true, features = ["derive"], optional = true }
+uds_windows.workspace = true
+
 
 [build-dependencies]
 ff_codegen = { workspace = true, optional = true }

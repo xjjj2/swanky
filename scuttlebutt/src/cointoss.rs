@@ -87,8 +87,9 @@ mod tests {
     use crate::Channel;
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
+       
     };
+    use uds_windows::UnixStream;
 
     #[test]
     fn test() {
