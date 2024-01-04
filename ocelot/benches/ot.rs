@@ -7,9 +7,9 @@ use ocelot::ot::{
 use scuttlebutt::{AesRng, Block, Channel};
 use std::{
     io::{BufReader, BufWriter},
-    os::unix::net::UnixStream,
     time::Duration,
 };
+use uds_windows::UnixStream;
 
 /// Specifies the number of OTs to run when benchmarking OT extension.
 const T: usize = 1 << 18;

@@ -655,8 +655,8 @@ mod tests {
     };
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
     };
+    use uds_windows::UnixStream;
 
     fn test_fcom_random<FE: FiniteField>() -> () {
         let count = 100;

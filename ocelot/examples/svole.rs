@@ -7,9 +7,9 @@ use scuttlebutt::{field::F40b, AbstractChannel, AesRng};
 use std::io::{Read, Write};
 use std::{
     io::{BufReader, BufWriter},
-    os::unix::net::UnixStream,
     time::Instant,
 };
+use uds_windows::UnixStream;
 
 fn get_trials() -> usize {
     if let Ok(n) = std::env::var("N") {

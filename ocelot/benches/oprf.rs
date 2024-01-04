@@ -8,9 +8,9 @@ use ocelot::{
 use scuttlebutt::{AesRng, Block, Block512, Channel};
 use std::{
     io::{BufReader, BufWriter},
-    os::unix::net::UnixStream,
     time::Duration,
 };
+use uds_windows::UnixStream;
 
 type OpprfSender = kmprt::Sender<kkrt::Sender<chou_orlandi::Receiver>>;
 type OpprfReceiver = kmprt::Receiver<kkrt::Receiver<chou_orlandi::Sender>>;

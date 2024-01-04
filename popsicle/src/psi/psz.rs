@@ -273,8 +273,8 @@ mod tests {
     use scuttlebutt::{AesRng, Channel};
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
     };
+    use uds_windows::UnixStream;
 
     const ITEM_SIZE: usize = 8;
     const SET_SIZE: usize = 1 << 16;

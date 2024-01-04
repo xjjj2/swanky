@@ -11,9 +11,9 @@ use scuttlebutt::{AesRng, Channel};
 use std::{
     fs::File,
     io::{BufReader, BufWriter},
-    os::unix::net::UnixStream,
     time::Duration,
 };
+use uds_windows::UnixStream;
 
 type Reader = BufReader<UnixStream>;
 type Writer = BufWriter<UnixStream>;

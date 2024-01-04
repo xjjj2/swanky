@@ -397,8 +397,8 @@ mod tests {
     use scuttlebutt::{AesRng, Channel};
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
     };
+    use uds_windows::UnixStream;
 
     fn _test_opprf_points(ninputs: usize, npoints: usize, npoints_bound: usize) {
         assert!(ninputs <= npoints);

@@ -1482,9 +1482,9 @@ mod tests {
     };
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
     };
-
+    use uds_windows::UnixStream;
+    
     const DEFAULT_NUM_BUCKET: usize = 5;
     const DEFAULT_NUM_CUT: usize = 5;
     const NB_BITS: usize = 38;

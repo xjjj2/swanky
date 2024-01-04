@@ -448,8 +448,8 @@ mod tests {
     };
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
     };
+    use uds_windows::UnixStream;
 
     fn test_lpn_svole_<FE: FF, Sender: SVoleSender<Msg = FE>, Receiver: SVoleReceiver<Msg = FE>>() {
         let (sender, receiver) = UnixStream::pair().unwrap();

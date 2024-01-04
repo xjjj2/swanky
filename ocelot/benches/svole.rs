@@ -14,11 +14,10 @@ use scuttlebutt::{
 };
 use std::{
     io::{BufReader, BufWriter},
-    os::unix::net::UnixStream,
     sync::{Arc, Mutex},
     time::Duration,
 };
-
+use uds_windows::UnixStream;
 // TODO: re-enable ggm_utils benchmarks once we've sorted out the private modules issue.
 /*#[path = "../src/svole/wykw/ggm_utils.rs"]
 mod ggm_utils;*/

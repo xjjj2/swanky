@@ -176,9 +176,9 @@ mod tests {
     use std::{
         fmt::Display,
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
         sync::{Arc, Mutex},
     };
+    use uds_windows::UnixStream;
 
     fn rand_block_vec(size: usize) -> Vec<Block> {
         (0..size).map(|_| rand::random::<Block>()).collect()

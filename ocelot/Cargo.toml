@@ -26,6 +26,7 @@ vectoreyes.workspace = true
 generic-array.workspace = true
 subtle.workspace = true
 bytemuck.workspace = true
+uds_windows.workspace = true
 
 [build-dependencies]
 cc.workspace = true

@@ -5,10 +5,9 @@ use popsicle::psz;
 use scuttlebutt::{AesRng, Channel};
 use std::{
     io::{BufReader, BufWriter},
-    os::unix::net::UnixStream,
     time::Duration,
 };
-
+use uds_windows::UnixStream;
 const SIZE: usize = 15;
 
 fn rand_vec(n: usize) -> Vec<u8> {

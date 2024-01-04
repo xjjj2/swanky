@@ -372,9 +372,8 @@ mod test {
     };
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
     };
-
+    use uds_windows::UnixStream;
     fn test_spsvole_<FE: FF>(cols: usize, weight: usize) {
         let r = Degree::<FE>::USIZE;
         let n = cols / weight;

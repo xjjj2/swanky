@@ -27,7 +27,7 @@ fancy-garbling = { workspace = true, optional = true }
 openssl        = { workspace = true, optional = true }
 serde          = { workspace = true, features = ["derive"], optional = true }
 serde_json     = { workspace = true, optional = true }
-
+uds_windows.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 

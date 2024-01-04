@@ -26,6 +26,7 @@ num-traits.workspace = true
 scuttlebutt.workspace = true
 ocelot.workspace = true
 zki_sieve.workspace = true
+uds_windows.workspace = true
 
 [[bin]]
 name = "dietmc_zki"

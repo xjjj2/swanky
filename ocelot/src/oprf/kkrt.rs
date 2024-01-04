@@ -212,9 +212,9 @@ mod tests {
     use scuttlebutt::{AesRng, Channel};
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
         sync::{Arc, Mutex},
     };
+    use uds_windows::UnixStream;
 
     #[test]
     fn test_seed() {

@@ -164,8 +164,8 @@ mod tests {
     };
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
     };
+    use uds_windows::UnixStream;
 
     fn test_copee_<FE: FF>(len: usize) {
         let mut rng = AesRng::new();

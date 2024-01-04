@@ -722,9 +722,8 @@ mod tests {
     };
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
     };
-
+    use uds_windows::UnixStream;
     fn test<FE: FiniteField>() {
         let (sender, receiver) = UnixStream::pair().unwrap();
         let handle = std::thread::spawn(move || {

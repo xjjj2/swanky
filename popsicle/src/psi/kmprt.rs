@@ -187,8 +187,8 @@ mod tests {
     use scuttlebutt::{AesRng, SyncChannel};
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
     };
+    use uds_windows::UnixStream;
 
     #[test]
     fn test_secret_sharing_of_zero() {

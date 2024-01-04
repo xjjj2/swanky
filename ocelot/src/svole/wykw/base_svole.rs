@@ -132,8 +132,8 @@ mod tests {
     };
     use std::{
         io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
     };
+    use uds_windows::UnixStream;
 
     fn test_base_svole<FE: FF, S: FiniteFieldSpecialization<FE>>(len: usize) {
         let (sender, receiver) = UnixStream::pair().unwrap();
