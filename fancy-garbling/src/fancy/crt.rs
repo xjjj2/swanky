@@ -385,6 +385,34 @@ pub trait CrtGadgets:
         Ok(Bundle::new(zwires))
     }
 
+    ///Another way to switch CRT to PMR
+    fn crt_to_pmr_2(
+        &mut self,
+        xs: &CrtBundle<Self::Item>,
+    ) -> Result<Bundle<Self::Item>, Self::Error> 
+    {
+        let mods = xs.moduli();
+        let n = xs.size();
+        let mut c = vec![vec![0; n]; n];
+        for i in 0..n - 1{
+            for j in i + 1 .. n{
+                c[i][j] = util::inv(mods[i] as i128, mods[j] as i128) as u16;
+            }
+        }
+        let mut zwires = Vec::with_capacity(n);
+        for i in 0..n {
+            let base = xs[i].clone();
+            let mut line = Vec::with_capacity(i);
+            line.push(base);
+            for j in 0..i {
+                let minus = self.mod_change(&zwires[i], mods[i]).unwrap();
+                let mid = self.sub(&line[j], &minus).unwrap();
+                line.push(self.cmul(&mid, c[j][i]).unwrap());
+            }
+            zwires.push(line[i - 1].clone());
+        }
+        Ok(Bundle::new(zwires))
+    }
     /// Comparison based on PMR, more expensive than crt_lt but works on more things. For
     /// it to work, there must be an extra modulus in the CRT that is not necessary to
     /// represent the values. This ensures that if x < y, the most significant PMR digit
